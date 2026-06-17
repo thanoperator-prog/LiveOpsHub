@@ -1,0 +1,1328 @@
+import { Component, ChangeDetectionStrategy, signal, computed, OnInit, OnDestroy } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+
+// --- TYPES AND INTERFACES ---
+type BrandStatus = 'Normal' | 'Pending' | 'Critical' | 'Needs Attention';
+type Tab = 'dashboard' | 'brands' | 'settings';
+type SettingsView = 'profile' | 'brands' | 'users';
+
+export type Role = 'TSS' | 'LOL' | 'LOT' | 'POC' | 'LO';
+
+export const ROLE_DEFINITIONS = [
+  { code: 'TSS', name: 'TechSupp Supervisor', isAdmin: true },
+  { code: 'LOL', name: 'Live Operator Lead', isAdmin: true },
+  { code: 'LOT', name: 'Live Operator Trainer', isAdmin: true },
+  { code: 'POC', name: 'Point of Contact', isAdmin: true },
+  { code: 'LO', name: 'Live Operator', isAdmin: false }
+];
+
+export interface User {
+  id: string;
+  username: string;
+  password?: string; 
+  name: string;
+  role: Role;
+  assignedBrandIds?: string[]; // Bagong field para sa Brand Assignments
+}
+
+interface Brand {
+  id: string;
+  name: string;
+  status: BrandStatus;
+  pendingCount: number;
+  lastUpdated: Date;
+  logoBase64?: string | null;
+}
+
+interface Endorsement {
+  id: string;
+  brandId: string;
+  message: string;
+  author: string;
+  timestamp: Date;
+  isResolved: boolean;
+  severity: BrandStatus;
+}
+
+@Component({
+  selector: 'app-root',
+  imports: [CommonModule, FormsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (!currentUser()) {
+      <!-- LOGIN SCREEN -->
+      <div class="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 selection:bg-blue-100 selection:text-blue-900">
+        <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          
+          <div class="bg-blue-600 p-8 text-center flex flex-col items-center">
+            <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center text-white mb-4 backdrop-blur-sm shadow-inner">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <h1 class="text-2xl font-black text-white tracking-tight">LiveOps Hub</h1>
+            <p class="text-blue-100 text-xs font-bold uppercase tracking-wider mt-1">Brand Monitor</p>
+          </div>
+
+          <div class="p-8">
+            <h2 class="text-lg font-bold text-slate-800 mb-6 text-center">Sign in to your account</h2>
+            
+            @if (loginError()) {
+              <div class="bg-red-50 text-red-600 border border-red-200 text-sm font-semibold rounded-lg p-3 mb-5 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {{ loginError() }}
+              </div>
+            }
+
+            <form (ngSubmit)="handleLogin()" class="space-y-5">
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Username</label>
+                <input type="text" [(ngModel)]="loginForm.username" name="username" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Password</label>
+                <input type="password" [(ngModel)]="loginForm.password" name="password" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
+              </div>
+              <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition-colors mt-2">
+                Access Hub
+              </button>
+            </form>
+          </div>
+        </div>
+        <p class="text-slate-400 text-xs font-semibold mt-6">Secure Access Restricted to Authorized Personnel</p>
+      </div>
+
+    } @else {
+      <!-- MAIN APP WITH COLLAPSIBLE SIDEBAR -->
+      <div class="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden selection:bg-blue-100 selection:text-blue-900">
+        
+        <!-- SIDEBAR -->
+        <aside [class.w-64]="isSidebarExpanded()" [class.w-20]="!isSidebarExpanded()" class="bg-slate-900 flex flex-col transition-all duration-300 z-30 shrink-0 relative shadow-xl">
+          <!-- Toggle Button -->
+          <button (click)="toggleSidebar()" class="absolute -right-3 top-6 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:text-blue-600 shadow-md z-40 transition-transform" [class.rotate-180]="!isSidebarExpanded()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+
+          <!-- Logo -->
+          <div class="h-16 flex items-center px-4 border-b border-slate-800 shrink-0 overflow-hidden">
+            <div class="flex items-center gap-3 w-full">
+              <div class="w-10 h-10 shrink-0 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <div class="whitespace-nowrap transition-opacity duration-200" [class.opacity-0]="!isSidebarExpanded()" [class.w-0]="!isSidebarExpanded()">
+                <h1 class="text-base font-black text-white tracking-tight leading-tight">LiveOps Hub</h1>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Brand Monitor</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigation Tabs -->
+          <nav class="flex-1 px-3 py-6 space-y-2 overflow-y-auto overflow-x-hidden">
+            <button (click)="setActiveTab('dashboard')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors" [class]="activeTab() === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+              <div class="w-6 flex justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              </div>
+              <span class="whitespace-nowrap font-semibold text-sm transition-opacity duration-200" [class.opacity-0]="!isSidebarExpanded()">Metrics Dashboard</span>
+            </button>
+            
+            <button (click)="setActiveTab('brands')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors" [class]="activeTab() === 'brands' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+              <div class="w-6 flex justify-center shrink-0 relative">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                 <!-- Collapsed Badge -->
+                 @if (activeIssuesCount() > 0 && !isSidebarExpanded()) {
+                    <div class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></div>
+                 }
+              </div>
+              <span class="whitespace-nowrap font-semibold text-sm transition-opacity duration-200 flex-1 text-left" [class.opacity-0]="!isSidebarExpanded()">Live Brands</span>
+              <!-- Expanded Badge -->
+              @if (activeIssuesCount() > 0 && isSidebarExpanded()) {
+                 <span class="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">{{ activeIssuesCount() }}</span>
+              }
+            </button>
+
+            <!-- Settings accessible to everyone now, protected inner tabs -->
+            <button (click)="setActiveTab('settings')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors" [class]="activeTab() === 'settings' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
+              <div class="w-6 flex justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              </div>
+              <span class="whitespace-nowrap font-semibold text-sm transition-opacity duration-200" [class.opacity-0]="!isSidebarExpanded()">Settings</span>
+            </button>
+          </nav>
+
+          <!-- User Info & Logout -->
+          <div class="p-4 border-t border-slate-800 flex flex-col gap-4 overflow-hidden shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 shrink-0 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 text-slate-200 font-bold text-sm shadow-inner">
+                {{ getInitials(currentUser()?.name || '') }}
+              </div>
+              <div class="flex-1 min-w-0 transition-opacity duration-200" [class.opacity-0]="!isSidebarExpanded()">
+                <div class="text-xs font-bold text-white truncate">{{ currentUser()?.name }}</div>
+                <div class="text-[9px] font-bold uppercase tracking-wider text-blue-400 truncate">{{ getRoleName(currentUser()?.role) }}</div>
+              </div>
+            </div>
+            
+            <button (click)="handleLogout()" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-red-400 transition-colors" [class.justify-center]="!isSidebarExpanded()" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span class="text-xs font-bold whitespace-nowrap transition-opacity duration-200" [class.opacity-0]="!isSidebarExpanded()" [class.hidden]="!isSidebarExpanded()">Sign Out</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA WRAPPER -->
+        <div class="flex-1 flex flex-col min-w-0 relative">
+          
+          <!-- MINIMAL HEADER (Clock only) -->
+          <header class="bg-white/80 backdrop-blur-md border-b border-slate-200 h-14 flex items-center justify-end px-6 shrink-0 z-10 sticky top-0">
+            <div class="flex items-center gap-2">
+              <div class="text-sm font-bold text-slate-800 tracking-wide">{{ currentTime() | date:'shortTime':'+0800' }}</div>
+              <div class="h-4 w-px bg-slate-300"></div>
+              <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{{ currentTime() | date:'MMM d, y':'+0800' }}</div>
+            </div>
+          </header>
+
+          <!-- SCROLLABLE CONTENT -->
+          <main class="flex-1 overflow-auto relative p-6 md:p-8">
+            
+            @if (activeTab() === 'dashboard') {
+              <!-- DASHBOARD CONTENT (Same as previous) -->
+              <div class="w-full max-w-7xl mx-auto space-y-8">
+                <div class="mb-2">
+                  <h2 class="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Executive Dashboard</h2>
+                  <p class="text-sm text-slate-500">Real-time operational statistics and historical data.</p>
+                </div>
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm flex items-center justify-between">
+                    <div>
+                      <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Brands</p>
+                      <h3 class="text-3xl font-black text-slate-800">{{ stats().totalBrands }}</h3>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center border border-blue-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                  </div>
+                  <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm flex items-center justify-between relative overflow-hidden">
+                    <div class="absolute bottom-0 left-0 w-full h-1 bg-emerald-400"></div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Operational</p>
+                      <h3 class="text-3xl font-black text-emerald-600">{{ stats().normalBrands }}</h3>
+                    </div>
+                    <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center border border-emerald-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    </div>
+                  </div>
+                  <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm flex items-center justify-between relative overflow-hidden">
+                    <div class="absolute bottom-0 left-0 w-full h-1" [class]="stats().unresolvedLogs > 0 ? 'bg-amber-400' : 'bg-slate-200'"></div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Open Tickets</p>
+                      <h3 class="text-3xl font-black" [class]="stats().unresolvedLogs > 0 ? 'text-amber-600' : 'text-slate-800'">{{ stats().unresolvedLogs }}</h3>
+                    </div>
+                    <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center border border-amber-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    </div>
+                  </div>
+                  <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm flex items-center justify-between relative overflow-hidden">
+                     <div class="absolute bottom-0 left-0 w-full h-1 bg-blue-400"></div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Resolution Rate</p>
+                      <h3 class="text-3xl font-black text-blue-600">{{ stats().resolutionRate }}%</h3>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center border border-blue-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Floor Health Bar Chart -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                  <h3 class="text-sm font-bold text-slate-800 mb-4 uppercase tracking-wide">Floor Health Distribution</h3>
+                  
+                  <div class="flex h-4 rounded-full overflow-hidden bg-slate-100 border border-slate-200 mb-4">
+                    <div class="bg-emerald-500 transition-all duration-500" [style.width]="stats().normalPct + '%'" [title]="'Normal: ' + stats().normalBrands"></div>
+                    <div class="bg-blue-400 transition-all duration-500" [style.width]="stats().pendingPct + '%'" [title]="'Pending: ' + stats().pendingBrands"></div>
+                    <div class="bg-amber-400 transition-all duration-500" [style.width]="stats().attentionPct + '%'" [title]="'Needs Attention: ' + stats().attentionBrands"></div>
+                    <div class="bg-red-500 transition-all duration-500" [style.width]="stats().criticalPct + '%'" [title]="'Critical: ' + stats().criticalBrands"></div>
+                  </div>
+
+                  <div class="flex flex-wrap gap-6 text-xs font-semibold text-slate-600">
+                    <div class="flex items-center gap-2">
+                      <div class="w-3 h-3 rounded-sm bg-emerald-500 shadow-sm"></div> Normal ({{ stats().normalPct }}%)
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="w-3 h-3 rounded-sm bg-blue-400 shadow-sm"></div> Pending ({{ stats().pendingPct }}%)
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="w-3 h-3 rounded-sm bg-amber-400 shadow-sm"></div> Attention ({{ stats().attentionPct }}%)
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="w-3 h-3 rounded-sm bg-red-500 shadow-sm"></div> Critical ({{ stats().criticalPct }}%)
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Recent Activity Feed -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                   <div class="p-5 border-b border-slate-200 bg-slate-50/50">
+                     <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Recent Incident Logs</h3>
+                   </div>
+                   <div class="divide-y divide-slate-100">
+                     @for (activity of recentActivities(); track activity.id) {
+                       <div class="p-5 hover:bg-slate-50 transition-colors flex items-start gap-4">
+                         <div class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 shadow-sm border border-white" [class]="activity.isResolved ? 'bg-emerald-500' : 'bg-amber-500'"></div>
+                         <div class="w-10 h-10 rounded shadow-sm border border-slate-200 shrink-0 bg-white flex items-center justify-center overflow-hidden">
+                           @if (getBrandLogo(activity.brandId)) {
+                              <img [src]="getBrandLogo(activity.brandId)" class="w-full h-full object-cover">
+                           } @else {
+                              <span class="text-xs font-bold text-slate-500">{{ getInitials(getBrandName(activity.brandId)) }}</span>
+                           }
+                         </div>
+                         <div class="flex-1">
+                           <p class="text-sm text-slate-800 font-medium mb-1">{{ activity.message }}</p>
+                           <div class="flex items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex-wrap">
+                             <span class="text-blue-700">{{ getBrandName(activity.brandId) }}</span>
+                             <span>•</span>
+                             <span>{{ activity.author }}</span>
+                             <span>•</span>
+                             <span>{{ activity.timestamp | date:'MMM d, h:mm a':'+0800' }}</span>
+                             @if (activity.isResolved) {
+                               <span class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Resolved</span>
+                             } @else {
+                               <span class="px-1.5 py-0.5 rounded border" [class]="getStatusBadgeClasses(activity.severity)">{{ activity.severity }}</span>
+                             }
+                           </div>
+                         </div>
+                       </div>
+                     } @empty {
+                       <div class="p-8 text-center text-slate-500 font-medium">No recent incidents logged in the system.</div>
+                     }
+                   </div>
+                </div>
+              </div>
+
+            } @else if (activeTab() === 'brands') {
+              <div class="w-full mx-auto relative">
+                
+                <div class="mb-8">
+                  <h2 class="text-2xl font-bold text-slate-900 tracking-tight mb-1">Active Brand Roster</h2>
+                  <p class="text-sm text-slate-500">Monitor individual brand status and manage pending endorsements.</p>
+                </div>
+
+                <!-- Filters including 'My Assigned Brands' -->
+                <div class="flex flex-wrap gap-2 mb-8 bg-white p-2 rounded-lg border border-slate-200 shadow-sm inline-flex">
+                  @for (filter of availableFilters; track filter) {
+                    <button 
+                      (click)="setFilter(filter)"
+                      class="px-4 py-1.5 rounded-md text-sm font-semibold transition-all duration-200"
+                      [class]="currentFilter() === filter 
+                        ? 'bg-blue-600 text-white shadow' 
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'">
+                      {{ filter }} 
+                      @if (filter !== 'All' && filter !== 'My Assigned Brands') {
+                         <span class="ml-1 opacity-70">({{ getFilterCount(filter) }})</span>
+                      }
+                      @if (filter === 'My Assigned Brands') {
+                         <span class="ml-1 opacity-70">({{ currentUser()?.assignedBrandIds?.length || 0 }})</span>
+                      }
+                    </button>
+                  }
+                </div>
+
+                <!-- COMPACT Brand Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                  @for (brand of filteredBrands(); track brand.id) {
+                    <div 
+                      (click)="selectBrand(brand)"
+                      class="group bg-white rounded-xl border border-slate-200 p-3.5 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-3 relative overflow-hidden">
+                      
+                      <div class="w-10 h-10 rounded shadow-sm border border-slate-100 shrink-0 flex items-center justify-center font-bold text-sm bg-slate-50 text-slate-600 overflow-hidden">
+                        @if (brand.logoBase64) {
+                           <img [src]="brand.logoBase64" class="w-full h-full object-cover">
+                        } @else {
+                           {{ getInitials(brand.name) }}
+                        }
+                      </div>
+                      
+                      <div class="flex-1 min-w-0">
+                        <h2 class="text-[13px] font-bold text-slate-800 group-hover:text-blue-700 truncate transition-colors">{{ brand.name }}</h2>
+                        <div class="mt-0.5">
+                          <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border inline-block" [class]="getStatusBadgeClasses(brand.status)">
+                            {{ brand.status }}
+                          </span>
+                        </div>
+                      </div>
+
+                      @if (brand.pendingCount > 0) {
+                        <div class="w-6 h-6 shrink-0 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center text-[10px] font-bold shadow-sm" title="Pending tasks">
+                          {{brand.pendingCount}}
+                        </div>
+                      }
+                    </div>
+                  } @empty {
+                    <div class="col-span-full py-16 flex flex-col items-center justify-center text-slate-400 bg-white border border-slate-200 border-dashed rounded-xl">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" class="mb-4 opacity-50 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <p class="font-medium text-slate-600">No brands match the current filter.</p>
+                    </div>
+                  }
+                </div>
+              </div>
+
+            } @else if (activeTab() === 'settings') {
+              <div class="w-full max-w-5xl mx-auto">
+                
+                <div class="mb-6">
+                  <h2 class="text-2xl font-bold text-slate-900 tracking-tight">System Configuration</h2>
+                  <p class="text-sm text-slate-500">Manage your profile and system permissions.</p>
+                </div>
+
+                <!-- Settings Sub-navigation -->
+                <div class="flex gap-4 border-b border-slate-200 mb-8 overflow-x-auto">
+                  <button (click)="settingsView.set('profile')" [class.border-blue-600]="settingsView() === 'profile'" [class.text-blue-700]="settingsView() === 'profile'" class="pb-3 px-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors whitespace-nowrap">
+                    My Profile
+                  </button>
+                  @if (isAdmin()) {
+                    <button (click)="settingsView.set('brands')" [class.border-blue-600]="settingsView() === 'brands'" [class.text-blue-700]="settingsView() === 'brands'" class="pb-3 px-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors whitespace-nowrap">
+                      Brand Directory
+                    </button>
+                    <button (click)="settingsView.set('users')" [class.border-blue-600]="settingsView() === 'users'" [class.text-blue-700]="settingsView() === 'users'" class="pb-3 px-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-2 whitespace-nowrap">
+                      User Management
+                      <span class="bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">Admin</span>
+                    </button>
+                  }
+                </div>
+
+                @if (settingsView() === 'profile') {
+                  <!-- Profile Management Section -->
+                  <div class="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-sm relative overflow-hidden max-w-2xl">
+                    <div class="absolute top-0 left-0 w-1.5 h-full bg-slate-800"></div>
+                    <h3 class="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" class="text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      Account Settings
+                    </h3>
+                    
+                    @if (profileMessage()) {
+                      <div class="mb-5 p-3 rounded-lg text-sm font-bold border" [class.bg-emerald-50]="profileMessage()?.type === 'success'" [class.text-emerald-700]="profileMessage()?.type === 'success'" [class.border-emerald-200]="profileMessage()?.type === 'success'" [class.bg-red-50]="profileMessage()?.type === 'error'" [class.text-red-700]="profileMessage()?.type === 'error'" [class.border-red-200]="profileMessage()?.type === 'error'">
+                        {{ profileMessage()?.text }}
+                      </div>
+                    }
+
+                    <div class="space-y-5">
+                      <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Display Name</label>
+                        <input [(ngModel)]="profileForm.name" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-800 shadow-sm transition-all">
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                          <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">New Password</label>
+                          <input type="password" [(ngModel)]="profileForm.newPassword" placeholder="Leave blank to keep current" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-800 shadow-sm transition-all">
+                        </div>
+                        <div>
+                          <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Confirm New Password</label>
+                          <input type="password" [(ngModel)]="profileForm.confirmPassword" placeholder="Re-type new password" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-800 shadow-sm transition-all">
+                        </div>
+                      </div>
+                      <div class="pt-2">
+                        <button (click)="promptUpdateProfile()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                } @else if (settingsView() === 'brands' && isAdmin()) {
+                  <!-- Brand Management Section -->
+                  <div class="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-600"></div>
+                    <h3 class="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" class="text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                      Register New Brand
+                    </h3>
+                    
+                    <div class="flex flex-col md:flex-row gap-6 items-end">
+                      <!-- Logo Upload Box -->
+                      <div class="flex flex-col items-center gap-2">
+                        <div class="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 overflow-hidden relative group cursor-pointer">
+                            @if (newBrand.logoBase64) {
+                              <img [src]="newBrand.logoBase64" class="w-full h-full object-cover">
+                            } @else {
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" class="text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                            }
+                            <input type="file" accept="image/*" (change)="onFileSelected($event, 'new')" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" title="Upload Brand Logo">
+                        </div>
+                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Logo (Click)</label>
+                      </div>
+
+                      <div class="flex-1 w-full">
+                        <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Brand Name</label>
+                        <input [(ngModel)]="newBrand.name" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-800 placeholder-slate-400 transition-all shadow-sm" placeholder="e.g. Acme Corp">
+                      </div>
+                      
+                      <button (click)="promptAddBrand()" [disabled]="!newBrand.name" class="w-full md:w-auto bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors whitespace-nowrap">
+                        Save Brand
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Edit/Delete List -->
+                  <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                      <h3 class="text-base font-bold text-slate-800 uppercase tracking-wide">Brand Directory Configuration</h3>
+                      <span class="bg-white border border-slate-200 text-slate-600 font-bold text-xs px-3 py-1 rounded-full shadow-sm">{{brands().length}} Registered</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                      <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-slate-100/50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                          <tr>
+                            <th class="px-6 py-4">Logo</th>
+                            <th class="px-6 py-4">Brand Entity</th>
+                            <th class="px-6 py-4 text-right">Administrative Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          @for (brand of sortedBrands(); track brand.id) {
+                            <tr class="hover:bg-slate-50 transition-colors group">
+                              <td class="px-6 py-3 w-20">
+                                @if (editingBrandId() === brand.id) {
+                                  <div class="w-10 h-10 rounded border-2 border-dashed border-blue-400 flex items-center justify-center bg-blue-50 overflow-hidden relative cursor-pointer" title="Change Logo">
+                                    @if (editForm.logoBase64) {
+                                        <img [src]="editForm.logoBase64" class="w-full h-full object-cover">
+                                    } @else {
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    }
+                                    <input type="file" accept="image/*" (change)="onFileSelected($event, 'edit')" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                                  </div>
+                                } @else {
+                                  <div class="w-10 h-10 rounded border border-slate-200 bg-white flex items-center justify-center overflow-hidden text-xs font-bold text-slate-500 shadow-sm">
+                                    @if (brand.logoBase64) {
+                                        <img [src]="brand.logoBase64" class="w-full h-full object-cover">
+                                    } @else {
+                                        {{ getInitials(brand.name) }}
+                                    }
+                                  </div>
+                                }
+                              </td>
+                              <td class="px-6 py-3 text-slate-800">
+                                @if (editingBrandId() === brand.id) {
+                                  <input [(ngModel)]="editForm.name" class="w-full max-w-sm bg-white border border-blue-500 rounded-lg px-3 py-2 text-sm font-semibold outline-none shadow-sm focus:ring-2 focus:ring-blue-100">
+                                } @else {
+                                  <div class="font-bold text-slate-900 text-base">{{ brand.name }}</div>
+                                }
+                              </td>
+                              <td class="px-6 py-3 text-right w-1/3">
+                                @if (editingBrandId() === brand.id) {
+                                  <div class="flex justify-end gap-2">
+                                    <button (click)="promptSaveEdit()" class="text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-200 px-4 py-1.5 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 shadow-sm">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save
+                                    </button>
+                                    <button (click)="cancelEdit()" class="text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-4 py-1.5 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 shadow-sm">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
+                                    </button>
+                                  </div>
+                                } @else {
+                                  <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button (click)="startEdit(brand)" class="text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-md transition-colors text-xs font-bold flex items-center gap-1">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit
+                                    </button>
+                                    <button (click)="promptDeleteBrand(brand.id)" class="text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-md transition-colors text-xs font-bold flex items-center gap-1">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Remove
+                                    </button>
+                                  </div>
+                                }
+                              </td>
+                            </tr>
+                          } @empty {
+                            <tr><td colspan="3" class="p-8 text-center text-slate-500 font-medium">No brands configured in the registry.</td></tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                } @else if (settingsView() === 'users' && isAdmin()) {
+                  <!-- User Management Section (Admins Only) -->
+                  <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                      <h3 class="text-base font-bold text-slate-800 uppercase tracking-wide">System Users Configuration</h3>
+                      <button (click)="showAddUserModal.set(true)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Create New User
+                      </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                      <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-slate-100/50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                          <tr>
+                            <th class="px-6 py-4">Name</th>
+                            <th class="px-6 py-4">Username</th>
+                            <th class="px-6 py-4">Role</th>
+                            <th class="px-6 py-4 text-center">Assigned Brands</th>
+                            <th class="px-6 py-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          @for (user of users(); track user.id) {
+                            <tr class="hover:bg-slate-50 transition-colors">
+                              <td class="px-6 py-3 font-bold text-slate-900">{{ user.name }}</td>
+                              <td class="px-6 py-3 text-slate-600">{{ user.username }}</td>
+                              <td class="px-6 py-3">
+                                <span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border inline-block bg-slate-100 text-slate-700 border-slate-300">
+                                  {{ getRoleName(user.role) }}
+                                </span>
+                              </td>
+                              <td class="px-6 py-3 text-center text-xs font-bold text-slate-500">
+                                {{ user.assignedBrandIds?.length || 0 }} Brands
+                              </td>
+                              <td class="px-6 py-3 text-right">
+                                <button (click)="openAssignmentModal(user)" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold mr-4 transition-colors underline decoration-transparent hover:decoration-indigo-800">
+                                  Manage Assignments
+                                </button>
+                                @if (user.id !== currentUser()?.id) {
+                                  <button (click)="promptDeleteUser(user.id)" class="text-red-600 hover:text-red-800 text-xs font-bold underline transition-colors">
+                                    Revoke Access
+                                  </button>
+                                } @else {
+                                  <span class="text-xs text-slate-400 italic">Current User</span>
+                                }
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+          </main>
+        </div>
+      </div>
+      
+      <!-- MODAL: ADD USER -->
+      @if (showAddUserModal()) {
+        <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-2xl relative overflow-hidden w-full max-w-md">
+             <div class="absolute top-0 left-0 w-full h-1.5 bg-emerald-500"></div>
+             <div class="p-6">
+                <h3 class="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" class="text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  Create New Account
+                </h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Full Name</label>
+                    <input [(ngModel)]="newUser.name" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-slate-800 shadow-sm" placeholder="John Doe">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Username</label>
+                    <input [(ngModel)]="newUser.username" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-slate-800 shadow-sm" placeholder="johndoe123">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Password</label>
+                    <input [(ngModel)]="newUser.password" type="password" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-slate-800 shadow-sm" placeholder="********">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">System Role</label>
+                    <select [(ngModel)]="newUser.role" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-slate-800 shadow-sm">
+                      @for (role of availableRoles; track role.code) {
+                        <option [value]="role.code">{{ role.name }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+                @if (userErrorMsg()) {
+                  <p class="text-xs text-red-600 font-bold mt-4">{{ userErrorMsg() }}</p>
+                }
+                <div class="mt-8 flex justify-end gap-3">
+                  <button (click)="showAddUserModal.set(false)" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+                  <button (click)="promptAddUser()" [disabled]="!newUser.name || !newUser.username || !newUser.password" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors">
+                    Create User
+                  </button>
+                </div>
+             </div>
+          </div>
+        </div>
+      }
+
+      <!-- MODAL: ASSIGN BRANDS -->
+      @if (assignmentModal(); as modal) {
+        <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 class="text-lg font-black text-slate-900">Brand Assignments</h3>
+                <p class="text-xs font-semibold text-slate-500 mt-0.5">Assign brands to <strong>{{ modal.userName }}</strong></p>
+              </div>
+              <button (click)="closeAssignmentModal()" class="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-white">
+               <div class="space-y-2">
+                 @for (brand of sortedBrands(); track brand.id) {
+                   <label class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-colors" [class.bg-blue-50]="modal.selectedBrands.has(brand.id)" [class.border-blue-200]="modal.selectedBrands.has(brand.id)">
+                     <input type="checkbox" [checked]="modal.selectedBrands.has(brand.id)" (change)="toggleBrandAssignment(brand.id)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                     <span class="text-sm font-bold text-slate-800 flex-1">{{ brand.name }}</span>
+                     @if (modal.selectedBrands.has(brand.id)) {
+                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                     }
+                   </label>
+                 }
+                 @if (sortedBrands().length === 0) {
+                   <p class="text-sm text-slate-500 text-center py-4">No brands available.</p>
+                 }
+               </div>
+            </div>
+            <div class="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+               <button (click)="closeAssignmentModal()" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-lg transition-colors">Cancel</button>
+               <button (click)="promptSaveAssignments()" class="px-4 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-md">Save Assignments</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- MODAL: GLOBAL CONFIRMATION (Highest Z-Index) -->
+      @if (confirmDialog(); as dialog) {
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div class="p-6">
+              <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <h3 class="text-xl font-black text-slate-900 mb-2">{{ dialog.title }}</h3>
+              <p class="text-sm text-slate-600 font-medium mb-8 leading-relaxed">{{ dialog.message }}</p>
+              <div class="flex gap-3 justify-end">
+                <button (click)="closeConfirm()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+                <button (click)="dialog.onConfirm()" class="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition-colors">Yes, Confirm</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- POP-UP MODAL OVERLAY FOR ENDORSEMENTS -->
+      @if (selectedBrand(); as activeBrand) {
+        <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 md:p-6" (click)="closePanel()">
+          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden" (click)="$event.stopPropagation()">
+            <div class="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
+              <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-lg flex items-center justify-center font-bold text-xl bg-white shadow-sm border border-slate-200 overflow-hidden text-slate-600">
+                  @if (activeBrand.logoBase64) {
+                     <img [src]="activeBrand.logoBase64" class="w-full h-full object-cover">
+                  } @else {
+                     {{ getInitials(activeBrand.name) }}
+                  }
+                </div>
+                <div>
+                  <div class="flex items-center gap-3 mb-1.5">
+                    <h3 class="text-xl font-black text-slate-900">{{ activeBrand.name }}</h3>
+                    <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shadow-sm" [class]="getStatusBadgeClasses(activeBrand.status)">
+                      {{ activeBrand.status }}
+                    </span>
+                  </div>
+                  <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Endorsement & Log History</p>
+                </div>
+              </div>
+              <button (click)="closePanel()" class="p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+              @for (log of currentBrandEndorsements(); track log.id) {
+                <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative">
+                  <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        {{ log.author }}
+                      </span>
+                      @if (log.severity !== 'Normal') {
+                        <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border" [class]="getStatusBadgeClasses(log.severity)">
+                          {{ log.severity }}
+                        </span>
+                      }
+                    </div>
+                    <span class="text-[11px] font-semibold text-slate-400">{{ log.timestamp | date:'short':'+0800' }}</span>
+                  </div>
+                  <p class="text-sm text-slate-600 leading-relaxed mb-4">{{ log.message }}</p>
+                  
+                  <div class="flex justify-end border-t border-slate-100 pt-3">
+                    @if (!log.isResolved) {
+                      <button (click)="promptResolveEndorsement(log.id, log.brandId)" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        Mark as Resolved
+                      </button>
+                    } @else {
+                      <span class="text-xs font-bold text-slate-500 flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        Resolved & Closed
+                      </span>
+                    }
+                  </div>
+                </div>
+              } @empty {
+                <div class="text-center py-12 flex flex-col items-center justify-center text-slate-400 bg-white border border-slate-200 border-dashed rounded-xl">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" class="mb-3 opacity-30 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <p class="text-sm font-semibold">No pending endorsements for this brand.</p>
+                </div>
+              }
+            </div>
+            <div class="p-6 border-t border-slate-200 bg-white">
+              <label class="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">File New Incident/Log</label>
+              <textarea 
+                #endorsementInput
+                class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none mb-3 shadow-sm"
+                rows="2"
+                placeholder="Enter details here..."></textarea>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">Issue Level:</label>
+                  <select #statusInput class="bg-white border border-slate-300 shadow-sm rounded-lg py-1.5 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                    <option value="Normal">Normal Log</option>
+                    <option value="Pending">Pending Setup/Info</option>
+                    <option value="Needs Attention">Needs Attention</option>
+                    <option value="Critical">Critical Incident</option>
+                  </select>
+                </div>
+                
+                <button 
+                  (click)="promptAddEndorsement(endorsementInput.value, statusInput.value); endorsementInput.value = ''; statusInput.value = 'Normal'"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-6 py-2.5 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  Submit Record
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  `
+})
+export class App implements OnInit, OnDestroy {
+  // --- AUTHENTICATION & USERS STATE ---
+  users = signal<User[]>([
+    { id: 'u1', username: 'admin', password: '123', name: 'System Administrator', role: 'TSS', assignedBrandIds: [] }
+  ]);
+  
+  currentUser = signal<User | null>(null);
+  
+  loginForm = { username: '', password: '' };
+  loginError = signal<string>('');
+
+  availableRoles = ROLE_DEFINITIONS;
+  newUser = { username: '', password: '', name: '', role: 'LO' as Role };
+  userErrorMsg = signal<string>('');
+
+  isAdmin = computed(() => {
+    const user = this.currentUser();
+    if (!user) return false;
+    const roleDef = this.availableRoles.find(r => r.code === user.role);
+    return roleDef ? roleDef.isAdmin : false;
+  });
+
+  // --- APP STATE ---
+  activeTab = signal<Tab>('dashboard');
+  settingsView = signal<SettingsView>('profile');
+  
+  currentTime = signal<Date>(new Date());
+  private timeInterval: any;
+
+  brands = signal<Brand[]>([
+    { id: 'b1', name: 'TechHaven PH', status: 'Normal', pendingCount: 0, lastUpdated: new Date() },
+    { id: 'b2', name: 'Glamour Beauty', status: 'Needs Attention', pendingCount: 1, lastUpdated: new Date() },
+    { id: 'b3', name: 'GamerGear', status: 'Critical', pendingCount: 1, lastUpdated: new Date() },
+    { id: 'b4', name: 'FitLife Essentials', status: 'Normal', pendingCount: 0, lastUpdated: new Date() },
+    { id: 'b5', name: 'HomeStyle Hub', status: 'Normal', pendingCount: 0, lastUpdated: new Date() },
+    { id: 'b6', name: 'GadgetZone', status: 'Normal', pendingCount: 0, lastUpdated: new Date() },
+    { id: 'b7', name: 'SneakerHead', status: 'Critical', pendingCount: 1, lastUpdated: new Date() },
+    { id: 'b8', name: 'PetPals Shop', status: 'Normal', pendingCount: 0, lastUpdated: new Date() },
+  ]);
+
+  endorsements = signal<Endorsement[]>([
+    { id: 'e1', brandId: 'b3', author: 'System Administrator', message: 'Payment gateway is returning 500 errors. Escalated to L2 Tech.', timestamp: new Date(Date.now() - 3600000), isResolved: false, severity: 'Critical' },
+    { id: 'e2', brandId: 'b2', author: 'Op. Santos', message: 'Awaiting floor manager approval for bulk refunds over limit.', timestamp: new Date(Date.now() - 1800000), isResolved: false, severity: 'Needs Attention' },
+    { id: 'e3', brandId: 'b7', author: 'Op. Reyes', message: 'SKU mismatch in inventory system causing overselling. Halt requested.', timestamp: new Date(Date.now() - 7200000), isResolved: false, severity: 'Critical' }
+  ]);
+
+  availableFilters: string[] = ['All', 'My Assigned Brands', 'Normal', 'Pending', 'Needs Attention', 'Critical'];
+  currentFilter = signal<string>('All');
+  selectedBrandId = signal<string | null>(null);
+
+  // --- MODAL SIGNALS ---
+  confirmDialog = signal<{title: string, message: string, onConfirm: () => void} | null>(null);
+  showAddUserModal = signal<boolean>(false);
+  assignmentModal = signal<{userId: string, userName: string, selectedBrands: Set<string>} | null>(null);
+
+  // Brand CRUD State
+  newBrand: { name: string, logoBase64: string | null } = { name: '', logoBase64: null };
+  editingBrandId = signal<string | null>(null);
+  editForm: { name: string, logoBase64: string | null } = { name: '', logoBase64: null };
+
+  // Profile Edit State
+  profileForm = { name: '', newPassword: '', confirmPassword: '' };
+  profileMessage = signal<{text: string, type: 'success'|'error'} | null>(null);
+
+  isSidebarExpanded = signal<boolean>(false);
+
+  // --- COMPUTED VALUES ---
+  sortedBrands = computed(() => {
+    return [...this.brands()].sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  filteredBrands = computed(() => {
+    const filter = this.currentFilter();
+    const allSorted = this.sortedBrands();
+    
+    if (filter === 'All') return allSorted;
+    
+    if (filter === 'My Assigned Brands') {
+      const user = this.currentUser();
+      if (!user || !user.assignedBrandIds) return [];
+      return allSorted.filter(b => user.assignedBrandIds!.includes(b.id));
+    }
+    
+    return allSorted.filter(b => b.status === filter);
+  });
+
+  selectedBrand = computed(() => {
+    const id = this.selectedBrandId();
+    if (!id) return null;
+    return this.brands().find(b => b.id === id) || null;
+  });
+
+  currentBrandEndorsements = computed(() => {
+    const brandId = this.selectedBrandId();
+    if (!brandId) return [];
+    return this.endorsements()
+      .filter(e => e.brandId === brandId)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  });
+
+  activeIssuesCount = computed(() => {
+    return this.brands().filter(b => b.status === 'Critical' || b.status === 'Needs Attention').length;
+  });
+
+  stats = computed(() => {
+    const bList = this.brands();
+    const eList = this.endorsements();
+    const total = bList.length;
+    
+    if (total === 0) {
+      return { totalBrands: 0, normalBrands: 0, unresolvedLogs: 0, resolutionRate: 0, normalPct: 0, pendingPct: 0, attentionPct: 0, criticalPct: 0, pendingBrands: 0, attentionBrands: 0, criticalBrands: 0 };
+    }
+
+    const normal = bList.filter(b => b.status === 'Normal').length;
+    const pending = bList.filter(b => b.status === 'Pending').length;
+    const attention = bList.filter(b => b.status === 'Needs Attention').length;
+    const critical = bList.filter(b => b.status === 'Critical').length;
+    
+    const unresolvedLogs = eList.filter(e => !e.isResolved).length;
+    const resolvedLogs = eList.filter(e => e.isResolved).length;
+    
+    let resolutionRate = 0;
+    if (eList.length > 0) {
+      resolutionRate = Math.round((resolvedLogs / eList.length) * 100);
+    } else {
+      resolutionRate = 100;
+    }
+
+    return {
+      totalBrands: total,
+      normalBrands: normal,
+      pendingBrands: pending,
+      attentionBrands: attention,
+      criticalBrands: critical,
+      unresolvedLogs,
+      resolutionRate,
+      normalPct: Math.round((normal / total) * 100),
+      pendingPct: Math.round((pending / total) * 100),
+      attentionPct: Math.round((attention / total) * 100),
+      criticalPct: Math.round((critical / total) * 100),
+    };
+  });
+
+  recentActivities = computed(() => {
+    return [...this.endorsements()]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 6);
+  });
+
+  // --- LIFECYCLE HOOKS ---
+  ngOnInit() {
+    this.timeInterval = setInterval(() => {
+      this.currentTime.set(new Date());
+    }, 1000);
+  }
+
+  ngOnDestroy() {
+    clearInterval(this.timeInterval);
+  }
+
+  // --- GLOBAL CONFIRM HELPER ---
+  requestConfirm(title: string, message: string, action: () => void) {
+    this.confirmDialog.set({
+      title,
+      message,
+      onConfirm: () => {
+        action();
+        this.closeConfirm();
+      }
+    });
+  }
+
+  closeConfirm() {
+    this.confirmDialog.set(null);
+  }
+
+  // --- AUTHENTICATION ---
+  handleLogin() {
+    this.loginError.set('');
+    const { username, password } = this.loginForm;
+    if (!username || !password) {
+      this.loginError.set('Please enter both username and password.');
+      return;
+    }
+
+    const user = this.users().find(u => u.username === username && u.password === password);
+    if (user) {
+      this.currentUser.set(user);
+      this.loginForm = { username: '', password: '' };
+      this.activeTab.set('dashboard');
+      this.settingsView.set('profile');
+      this.profileForm.name = user.name;
+      this.profileForm.newPassword = '';
+      this.profileForm.confirmPassword = '';
+      this.profileMessage.set(null);
+    } else {
+      this.loginError.set('Invalid credentials. Please try again.');
+    }
+  }
+
+  handleLogout() {
+    this.currentUser.set(null);
+  }
+
+  // --- USER MANAGEMENT & ASSIGNMENTS ---
+  getRoleName(roleCode?: Role): string {
+    if (!roleCode) return '';
+    return this.availableRoles.find(r => r.code === roleCode)?.name || roleCode;
+  }
+
+  promptAddUser() {
+    this.requestConfirm('Create Account', 'Are you sure you want to create this new user account?', () => this.addUser());
+  }
+
+  addUser() {
+    this.userErrorMsg.set('');
+    if (!this.newUser.username.trim() || !this.newUser.password.trim() || !this.newUser.name.trim()) return;
+
+    if (this.users().some(u => u.username.toLowerCase() === this.newUser.username.toLowerCase())) {
+      this.userErrorMsg.set('Username already exists.');
+      return;
+    }
+
+    const newU: User = {
+      id: 'u_' + Date.now(),
+      username: this.newUser.username.trim(),
+      password: this.newUser.password,
+      name: this.newUser.name.trim(),
+      role: this.newUser.role,
+      assignedBrandIds: []
+    };
+
+    this.users.update(list => [...list, newU]);
+    this.newUser = { username: '', password: '', name: '', role: 'LO' };
+    this.showAddUserModal.set(false);
+  }
+
+  promptDeleteUser(userId: string) {
+    this.requestConfirm('Revoke User Access', 'Are you sure you want to completely remove this user from the system? This action cannot be undone.', () => {
+      if (userId === this.currentUser()?.id) return;
+      this.users.update(list => list.filter(u => u.id !== userId));
+    });
+  }
+
+  // Assignment Modal Logic
+  openAssignmentModal(user: User) {
+    this.assignmentModal.set({
+      userId: user.id,
+      userName: user.name,
+      selectedBrands: new Set(user.assignedBrandIds || [])
+    });
+  }
+
+  closeAssignmentModal() {
+    this.assignmentModal.set(null);
+  }
+
+  toggleBrandAssignment(brandId: string) {
+    const modal = this.assignmentModal();
+    if (!modal) return;
+    const newSet = new Set(modal.selectedBrands);
+    if (newSet.has(brandId)) {
+      newSet.delete(brandId);
+    } else {
+      newSet.add(brandId);
+    }
+    this.assignmentModal.set({ ...modal, selectedBrands: newSet });
+  }
+
+  promptSaveAssignments() {
+    this.requestConfirm('Save Assignments', 'Are you sure you want to update the brand assignments for this user?', () => {
+      const modal = this.assignmentModal();
+      if (!modal) return;
+      
+      this.users.update(list => list.map(u => {
+        if (u.id === modal.userId) {
+          return { ...u, assignedBrandIds: Array.from(modal.selectedBrands) };
+        }
+        return u;
+      }));
+      
+      // If currently logged in user updated their own assignments, sync it.
+      if (this.currentUser()?.id === modal.userId) {
+         this.currentUser.set(this.users().find(u => u.id === modal.userId) || null);
+      }
+      
+      this.closeAssignmentModal();
+    });
+  }
+
+
+  // --- PROFILE MANAGEMENT ---
+  promptUpdateProfile() {
+    this.requestConfirm('Update Profile', 'Are you sure you want to save these changes to your profile?', () => this.updateProfile());
+  }
+
+  updateProfile() {
+    this.profileMessage.set(null);
+    const user = this.currentUser();
+    if (!user) return;
+
+    if (!this.profileForm.name.trim()) {
+      this.profileMessage.set({text: 'Display Name cannot be empty.', type: 'error'});
+      return;
+    }
+
+    if (this.profileForm.newPassword) {
+      if (this.profileForm.newPassword !== this.profileForm.confirmPassword) {
+        this.profileMessage.set({text: 'Passwords do not match.', type: 'error'});
+        return;
+      }
+    }
+
+    const updatedUsers = this.users().map(u => {
+      if (u.id === user.id) {
+        return { ...u, name: this.profileForm.name.trim(), password: this.profileForm.newPassword ? this.profileForm.newPassword : u.password };
+      }
+      return u;
+    });
+    
+    this.users.set(updatedUsers);
+    const updatedCurrentUser = updatedUsers.find(u => u.id === user.id);
+    if (updatedCurrentUser) this.currentUser.set(updatedCurrentUser);
+
+    this.profileForm.newPassword = '';
+    this.profileForm.confirmPassword = '';
+    this.profileMessage.set({text: 'Profile updated successfully!', type: 'success'});
+    setTimeout(() => this.profileMessage.set(null), 3000);
+  }
+
+  // --- UI ACTIONS ---
+  toggleSidebar() {
+    this.isSidebarExpanded.set(!this.isSidebarExpanded());
+  }
+
+  setActiveTab(tab: Tab) {
+    this.activeTab.set(tab);
+    if (tab !== 'brands') this.closePanel(); 
+    if (tab === 'settings') {
+      const user = this.currentUser();
+      if(user) {
+        this.profileForm.name = user.name;
+        this.profileForm.newPassword = '';
+        this.profileForm.confirmPassword = '';
+        this.profileMessage.set(null);
+      }
+    }
+  }
+
+  setFilter(filter: string) {
+    this.currentFilter.set(filter);
+    this.closePanel();
+  }
+
+  selectBrand(brand: Brand) {
+    this.selectedBrandId.set(brand.id);
+  }
+
+  closePanel() {
+    this.selectedBrandId.set(null);
+  }
+
+  // --- ENDORSEMENTS & STATUS LOGIC ---
+  promptAddEndorsement(message: string, severityValue: string) {
+    if (!message.trim()) return;
+    this.requestConfirm('Submit Log', `Are you sure you want to add this log to the brand's history?`, () => this.addEndorsement(message, severityValue));
+  }
+
+  addEndorsement(message: string, severityValue: string) {
+    const brandId = this.selectedBrandId();
+    if (!brandId) return;
+
+    const severity = severityValue as BrandStatus;
+    const authorName = this.currentUser()?.name || 'Unknown Operator';
+
+    const newLog: Endorsement = {
+      id: 'e_' + Date.now(),
+      brandId: brandId,
+      message: message.trim(),
+      author: authorName, 
+      timestamp: new Date(),
+      isResolved: false,
+      severity: severity
+    };
+
+    this.endorsements.update(logs => [...logs, newLog]);
+    this.recalculateBrandStatus(brandId);
+  }
+
+  promptResolveEndorsement(endorsementId: string, brandId: string) {
+    this.requestConfirm('Resolve Issue', 'Marking this issue as resolved will update the brand status. Are you sure?', () => this.resolveEndorsement(endorsementId, brandId));
+  }
+
+  resolveEndorsement(endorsementId: string, brandId: string) {
+    this.endorsements.update(logs => 
+      logs.map(log => log.id === endorsementId ? { ...log, isResolved: true } : log)
+    );
+    this.recalculateBrandStatus(brandId);
+  }
+
+  private recalculateBrandStatus(brandId: string) {
+    const unresolvedLogs = this.endorsements().filter(e => e.brandId === brandId && !e.isResolved);
+    
+    this.brands.update(brands => brands.map(b => {
+      if (b.id !== brandId) return b;
+      let newStatus: BrandStatus = 'Normal';
+      if (unresolvedLogs.length > 0) {
+        const hasCritical = unresolvedLogs.some(l => l.severity === 'Critical');
+        const hasNeedsAttention = unresolvedLogs.some(l => l.severity === 'Needs Attention');
+        const hasPending = unresolvedLogs.some(l => l.severity === 'Pending');
+
+        if (hasCritical) newStatus = 'Critical';
+        else if (hasNeedsAttention) newStatus = 'Needs Attention';
+        else if (hasPending) newStatus = 'Pending';
+      }
+      return {
+        ...b,
+        status: newStatus,
+        pendingCount: unresolvedLogs.filter(l => l.severity !== 'Normal').length,
+        lastUpdated: new Date()
+      };
+    }));
+  }
+
+  // --- BRAND CRUD METHODS ---
+  onFileSelected(event: Event, context: 'new' | 'edit') {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Str = e.target?.result as string;
+        if (context === 'new') this.newBrand.logoBase64 = base64Str;
+        else this.editForm.logoBase64 = base64Str;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  promptAddBrand() {
+    this.requestConfirm('Register Brand', 'Are you sure you want to add this new brand to the system?', () => this.addBrand());
+  }
+
+  addBrand() {
+    if (!this.newBrand.name.trim()) return;
+    const newB: Brand = {
+      id: 'b_' + Math.random().toString(36).substring(2, 9),
+      name: this.newBrand.name.trim(),
+      status: 'Normal',
+      pendingCount: 0,
+      lastUpdated: new Date(),
+      logoBase64: this.newBrand.logoBase64
+    };
+    this.brands.update(list => [...list, newB]);
+    this.newBrand = { name: '', logoBase64: null };
+  }
+
+  startEdit(brand: Brand) {
+    this.editingBrandId.set(brand.id);
+    this.editForm = { name: brand.name, logoBase64: brand.logoBase64 || null };
+  }
+
+  promptSaveEdit() {
+    this.requestConfirm('Save Changes', 'Are you sure you want to save the changes made to this brand?', () => this.saveEdit());
+  }
+
+  saveEdit() {
+    const id = this.editingBrandId();
+    if (!id || !this.editForm.name.trim()) return;
+    this.brands.update(list => list.map(b => 
+      b.id === id ? { ...b, name: this.editForm.name.trim(), logoBase64: this.editForm.logoBase64 } : b
+    ));
+    this.editingBrandId.set(null);
+  }
+
+  cancelEdit() {
+    this.editingBrandId.set(null);
+  }
+
+  promptDeleteBrand(id: string) {
+    this.requestConfirm('Remove Brand', 'Are you sure you want to permanently remove this brand? All its related logs will also be deleted.', () => this.deleteBrand(id));
+  }
+
+  deleteBrand(id: string) {
+    this.brands.update(list => list.filter(b => b.id !== id));
+    this.endorsements.update(list => list.filter(e => e.brandId !== id));
+    
+    // Also remove this brand ID from any user's assignments
+    this.users.update(list => list.map(u => ({
+       ...u,
+       assignedBrandIds: u.assignedBrandIds?.filter(bId => bId !== id) || []
+    })));
+
+    if (this.selectedBrandId() === id) {
+      this.selectedBrandId.set(null);
+    }
+  }
+
+  // --- UTILITY METHODS ---
+  getFilterCount(filter: string): number {
+    return this.brands().filter(b => b.status === filter).length;
+  }
+
+  getBrandName(brandId: string): string {
+    const brand = this.brands().find(b => b.id === brandId);
+    return brand ? brand.name : 'Unknown Brand';
+  }
+
+  getBrandLogo(brandId: string): string | null {
+    const brand = this.brands().find(b => b.id === brandId);
+    return brand && brand.logoBase64 ? brand.logoBase64 : null;
+  }
+
+  getInitials(name: string): string {
+    if (!name) return 'BR';
+    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  }
+
+  getStatusBadgeClasses(status: BrandStatus): string {
+    switch (status) {
+      case 'Normal': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Pending': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Critical': return 'bg-red-50 text-red-700 border-red-200';
+      case 'Needs Attention': return 'bg-amber-50 text-amber-700 border-amber-200';
+      default: return 'bg-slate-50 text-slate-600 border-slate-200';
+    }
+  }
+}
