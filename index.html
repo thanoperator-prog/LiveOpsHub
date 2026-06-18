@@ -19,69 +19,6 @@
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900">
   <div id="app" class="h-screen w-full flex flex-col overflow-hidden" @click="initializeAudio()">
     
-    <!-- DB Permission Error Overlay -->
-    <div v-if="dbPermissionError" class="fixed inset-0 bg-slate-900/95 z-[300] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl max-w-xl w-full p-8 shadow-2xl border border-red-200">
-        <div class="flex items-center gap-4 mb-6">
-          <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-red-600">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 leading-tight">Firebase Permission Denied</h2>
-            <p class="text-sm font-semibold text-slate-500">Firestore Rules need to be updated</p>
-          </div>
-        </div>
-        <p class="text-slate-700 mb-4 font-medium">Your Firebase Database is currently locked. To fix this and allow the app to sync across devices, please follow these steps:</p>
-        <ol class="list-decimal pl-5 space-y-2 mb-6 text-sm text-slate-600 font-medium">
-          <li>Go to the <a href="https://console.firebase.google.com/" target="_blank" class="text-blue-600 hover:underline">Firebase Console</a> and open your project <strong>liveopshub-cdf1a</strong>.</li>
-          <li>In the left menu, click <strong>Build</strong> > <strong>Firestore Database</strong>.</li>
-          <li>Go to the <strong>Rules</strong> tab.</li>
-          <li>Replace the default rules with the following code:</li>
-        </ol>
-        <div class="bg-slate-800 rounded-lg p-4 mb-6 relative group">
-          <button @click="copyRules" class="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors bg-slate-700 px-2 py-1 rounded text-xs font-bold">Copy</button>
-          <pre class="text-xs font-mono text-emerald-400 overflow-x-auto">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
-    }
-  }
-}</pre>
-        </div>
-        <div class="flex items-center justify-between">
-            <p class="text-sm text-amber-600 font-bold italic flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Click Publish, then refresh this page.</p>
-            <button @click="dbPermissionError = false" class="bg-slate-200 hover:bg-slate-300 text-slate-800 px-6 py-2.5 rounded-lg text-sm font-bold transition-colors">Dismiss</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Auth Error Overlay -->
-    <div v-if="authError" class="fixed inset-0 bg-slate-900/95 z-[300] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl max-w-xl w-full p-8 shadow-2xl border border-amber-200">
-         <div class="flex items-center gap-4 mb-6">
-          <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-600">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 leading-tight">Authentication Disabled</h2>
-            <p class="text-sm font-semibold text-slate-500">Anonymous Sign-in needs to be enabled</p>
-          </div>
-        </div>
-        <p class="text-slate-700 mb-4 font-medium">To securely connect to your database, please enable Anonymous Authentication:</p>
-        <ol class="list-decimal pl-5 space-y-2 mb-6 text-sm text-slate-600 font-medium">
-          <li>Go to the <a href="https://console.firebase.google.com/" target="_blank" class="text-blue-600 hover:underline">Firebase Console</a> > <strong>Build</strong> > <strong>Authentication</strong>.</li>
-          <li>Click the <strong>Sign-in method</strong> tab.</li>
-          <li>Find <strong>Anonymous</strong> in the provider list and click it.</li>
-          <li>Toggle it to <strong>Enable</strong> and click <strong>Save</strong>.</li>
-        </ol>
-        <p class="text-xs text-red-500 bg-red-50 p-3 rounded mb-6 font-mono break-words border border-red-100">{{ authErrorMessage }}</p>
-        <div class="flex justify-end">
-            <button @click="authError = false" class="bg-slate-200 hover:bg-slate-300 text-slate-800 px-6 py-2.5 rounded-lg text-sm font-bold transition-colors">Dismiss</button>
-        </div>
-      </div>
-    </div>
-
     <div class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2 pointer-events-none w-full max-w-md px-4">
       <template v-for="notif in activeNotifications" :key="notif.id">
         <div class="pointer-events-auto w-full flex flex-col p-3 rounded-xl shadow-2xl border animate-slideDown bg-white" :class="notif.type === 'critical' ? 'border-red-500' : 'border-amber-500'">
@@ -111,7 +48,6 @@ service cloud.firestore {
 
     <template v-if="!currentUser">
       <div class="flex-1 flex flex-col items-center justify-center p-4 relative">
-        <!-- DB connecting state -->
         <div v-if="!isDbReady" class="absolute inset-0 bg-slate-50/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
             <svg class="animate-spin h-10 w-10 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
             <p class="text-sm font-bold text-slate-500 uppercase tracking-widest animate-pulse">Establishing Secure Uplink</p>
@@ -129,12 +65,12 @@ service cloud.firestore {
             <form @submit.prevent="handleLogin" class="space-y-5">
               <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Username</label>
-                <input type="text" v-model="loginForm.username" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="admin">
+                <input type="text" v-model="loginForm.username" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="username">
               </div>
               <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Password</label>
                 <div class="relative">
-                  <input :type="showLoginPwd ? 'text' : 'password'" v-model="loginForm.password" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all pr-10" placeholder="123">
+                  <input :type="showLoginPwd ? 'text' : 'password'" v-model="loginForm.password" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all pr-10" placeholder="password">
                   <button type="button" @click="showLoginPwd = !showLoginPwd" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors">
                     <svg v-if="showLoginPwd" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -214,7 +150,7 @@ service cloud.firestore {
             <template v-if="activeTab === 'dashboard'">
               <div class="w-full max-w-7xl mx-auto space-y-8">
                 <div class="mb-2">
-                  <h2 class="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Executive Dashboard</h2>
+                  <h2 class="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Dashboard</h2>
                   <p class="text-sm text-slate-500">Real-time operational statistics and historical data.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -299,7 +235,7 @@ service cloud.firestore {
                              <span v-else class="text-[10px] font-bold text-slate-500">{{ getInitials(getBrandName(log.brandId)) }}</span> 
                            </div>
                            <div class="flex-1 min-w-0">
-                             <p class="text-xs text-slate-800 font-medium mb-1 group-hover:text-indigo-600 transition-colors line-clamp-2 whitespace-pre-line">{{ log.message }}</p>
+                             <p class="text-xs text-slate-800 font-medium mb-1 group-hover:text-indigo-600 transition-colors line-clamp-2 whitespace-pre-line">{{ log.text }}</p>
                              <div class="flex items-center gap-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex-wrap">
                                <span class="text-indigo-700 truncate max-w-[100px]">{{ getBrandName(log.brandId) }}</span><span>•</span><span>{{ log.author }}</span><span>•</span><span>{{ formatDate(log.timestamp).date }}</span>
                              </div>
@@ -520,17 +456,20 @@ service cloud.firestore {
                                 </td>
                                 <td class="px-6 py-3"><span class="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border inline-block bg-white shadow-sm text-slate-700 border-slate-300">{{ group.role.code }}</span></td>
                                 <td class="px-6 py-3 text-center text-xs font-bold text-slate-500">
-                                  <span v-if="user.role === 'LO'">{{ user.assignedBrandIds?.length || 0 }} Brands</span>
+                                  <span v-if="user.role === 'LO' || user.role === 'POC'">{{ user.assignedBrandIds?.length || 0 }} Brands</span>
                                   <span v-else-if="user.role === 'LOL'">{{ user.assignedOperatorIds?.length || 0 }} Operators</span>
                                   <span v-else class="text-slate-300">-</span>
                                 </td>
                                 <td class="px-6 py-3 text-right">
                                   <div class="flex items-center justify-end gap-2">
-                                    <button v-if="user.role === 'LO'" @click="openAssignmentModal(user)" class="text-indigo-600 hover:text-white bg-indigo-50 hover:bg-indigo-600 border border-indigo-200 hover:border-indigo-600 px-3 py-1.5 rounded-md transition-colors text-[10px] font-bold flex items-center gap-1 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> Manage Brands</button>
+                                    <button v-if="user.role === 'LO' || user.role === 'POC'" @click="openAssignmentModal(user)" class="text-indigo-600 hover:text-white bg-indigo-50 hover:bg-indigo-600 border border-indigo-200 hover:border-indigo-600 px-3 py-1.5 rounded-md transition-colors text-[10px] font-bold flex items-center gap-1 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> Manage Brands</button>
                                     <button v-else-if="user.role === 'LOL'" @click="openOperatorAssignmentModal(user)" class="text-emerald-600 hover:text-white bg-emerald-50 hover:bg-emerald-600 border border-emerald-200 hover:border-emerald-600 px-3 py-1.5 rounded-md transition-colors text-[10px] font-bold flex items-center gap-1 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Manage Team</button>
                                     
                                     <template v-if="user.id !== currentUser?.id">
                                       <select v-model="user.accountStatus" @change="promptChangeUserStatus(user.id, $event.target.value)" class="bg-white border rounded px-2 py-1 text-[10px] font-bold outline-none cursor-pointer" :class="user.accountStatus === 'Active' ? 'border-emerald-300' : user.accountStatus === 'Suspended' ? 'border-amber-300' : 'border-red-300'"><option value="Active">Active</option><option value="Suspended">Suspend</option><option value="Terminated">Terminate</option></select>
+                                      <!-- Edit and Delete User Actions -->
+                                      <button @click="openEditUserModal(user)" class="text-blue-600 hover:text-white bg-blue-50 hover:bg-blue-600 border border-blue-200 hover:border-blue-600 p-1.5 rounded-md transition-colors shadow-sm" title="Edit User"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1-1-4 9.5-9.5z"/></svg></button>
+                                      <button @click="promptDeleteUser(user.id)" class="text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 p-1.5 rounded-md transition-colors shadow-sm" title="Delete User"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                                     </template>
                                     <span v-else class="text-[10px] text-slate-400 italic px-3 py-1.5">You</span>
                                   </div>
@@ -577,6 +516,37 @@ service cloud.firestore {
               </div>
               <p v-if="userErrorMsg" class="text-xs text-red-600 font-bold mt-4">{{ userErrorMsg }}</p>
               <div class="mt-8 flex justify-end gap-3"><button @click="showAddUserModal = false" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button><button @click="promptAddUser" :disabled="!newUser.name || !newUser.username || !newUser.password" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors">Create User</button></div>
+           </div>
+        </div>
+      </div>
+
+      <div v-if="showEditUserModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-2xl relative overflow-hidden w-full max-w-md">
+           <div class="absolute top-0 left-0 w-full h-1.5 bg-blue-500"></div>
+           <div class="p-6">
+              <h3 class="text-xl font-black text-slate-900 mb-6 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" class="text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1-1-4 9.5-9.5z"/></svg> Edit User Account </h3>
+              <div class="space-y-4">
+                <div><label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Full Name</label><input v-model="editingUser.name" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 outline-none text-slate-800 shadow-sm" placeholder="John Doe"></div>
+                <div><label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Username</label><input v-model="editingUser.username" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 outline-none text-slate-800 shadow-sm" placeholder="johndoe123"></div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Password</label>
+                  <div class="relative">
+                    <input :type="showEditUserPwd ? 'text' : 'password'" v-model="editingUser.password" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 outline-none text-slate-800 shadow-sm pr-10" placeholder="********">
+                    <button type="button" @click="showEditUserPwd = !showEditUserPwd" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors">
+                      <svg v-if="showEditUserPwd" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">System Role</label>
+                  <select v-model="editingUser.role" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-semibold focus:border-blue-500 outline-none text-slate-800 shadow-sm">
+                    <option v-for="role in roles" :key="role.code" :value="role.code">{{ role.name }}</option>
+                  </select>
+                </div>
+              </div>
+              <p v-if="editUserErrorMsg" class="text-xs text-red-600 font-bold mt-4">{{ editUserErrorMsg }}</p>
+              <div class="mt-8 flex justify-end gap-3"><button @click="showEditUserModal = false" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button><button @click="promptSaveUserEdit" :disabled="!editingUser.name || !editingUser.username || !editingUser.password" class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors">Save Changes</button></div>
            </div>
         </div>
       </div>
@@ -630,18 +600,28 @@ service cloud.firestore {
       <div v-if="assignmentModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
           <div class="absolute top-0 left-0 w-full h-1.5 bg-indigo-500"></div>
-          <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-            <div><h3 class="text-lg font-black text-slate-900">Brand Assignments</h3><p class="text-xs font-semibold text-slate-500 mt-0.5">Assign brands to <strong>{{ assignmentModal.userName }}</strong></p></div>
+          <div class="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+            <div>
+              <h3 class="text-lg font-black text-slate-900">Brand Assignments</h3>
+              <p class="text-xs font-semibold text-slate-500 mt-0.5">Assign brands to <strong>{{ assignmentModal.userName }}</strong></p>
+            </div>
             <button @click="closeAssignmentModal" class="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div class="p-6 overflow-y-auto flex-1 bg-white">
+          <!-- Search Bar for Brands -->
+          <div class="p-3 border-b border-slate-100 bg-white">
+             <div class="relative w-full">
+               <input type="text" v-model="assignmentModal.searchQuery" placeholder="Search brands..." class="w-full bg-slate-50 border border-slate-300 rounded-lg py-2 pl-8 pr-3 text-xs font-semibold focus:border-indigo-500 outline-none">
+               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="absolute left-2.5 top-2.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+             </div>
+          </div>
+          <div class="p-4 overflow-y-auto flex-1 bg-white">
              <div class="space-y-2">
-               <label v-for="brand in sortedBrandsAdmin" :key="brand.id" class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 cursor-pointer transition-colors" :class="assignmentModal.selectedBrands.has(brand.id) ? 'bg-indigo-50 border-indigo-200' : ''">
+               <label v-for="brand in filteredAssignmentBrands" :key="brand.id" class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 cursor-pointer transition-colors" :class="assignmentModal.selectedBrands.has(brand.id) ? 'bg-indigo-50 border-indigo-200' : ''">
                  <input type="checkbox" :checked="assignmentModal.selectedBrands.has(brand.id)" @change="toggleBrandAssignment(brand.id)" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
                  <span class="text-sm font-bold text-slate-800 flex-1">{{ brand.name }} <span v-if="!brand.contractActive" class="text-[9px] bg-slate-100 text-slate-500 px-1 ml-1 rounded">Inactive</span></span>
                  <svg v-if="assignmentModal.selectedBrands.has(brand.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                </label>
-               <p v-if="sortedBrandsAdmin.length === 0" class="text-sm text-slate-500 text-center py-4">No brands available.</p>
+               <p v-if="filteredAssignmentBrands.length === 0" class="text-sm text-slate-500 text-center py-4">No brands match your search.</p>
              </div>
           </div>
           <div class="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
@@ -654,18 +634,28 @@ service cloud.firestore {
       <div v-if="operatorAssignmentModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
           <div class="absolute top-0 left-0 w-full h-1.5 bg-emerald-500"></div>
-          <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-            <div><h3 class="text-lg font-black text-slate-900">Operator Assignments</h3><p class="text-xs font-semibold text-slate-500 mt-0.5">Assign Operators to <strong>{{ operatorAssignmentModal.userName }}</strong></p></div>
+          <div class="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+            <div>
+              <h3 class="text-lg font-black text-slate-900">Operator Assignments</h3>
+              <p class="text-xs font-semibold text-slate-500 mt-0.5">Assign Operators to <strong>{{ operatorAssignmentModal.userName }}</strong></p>
+            </div>
             <button @click="closeOperatorAssignmentModal" class="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div class="p-6 overflow-y-auto flex-1 bg-white">
+          <!-- Search Bar for Operators -->
+          <div class="p-3 border-b border-slate-100 bg-white">
+             <div class="relative w-full">
+               <input type="text" v-model="operatorAssignmentModal.searchQuery" placeholder="Search operators..." class="w-full bg-slate-50 border border-slate-300 rounded-lg py-2 pl-8 pr-3 text-xs font-semibold focus:border-emerald-500 outline-none">
+               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="absolute left-2.5 top-2.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+             </div>
+          </div>
+          <div class="p-4 overflow-y-auto flex-1 bg-white">
              <div class="space-y-2">
-               <label v-for="op in availableLiveOperators" :key="op.id" class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 cursor-pointer transition-colors" :class="operatorAssignmentModal.selectedOperators.has(op.id) ? 'bg-emerald-50 border-emerald-200' : ''">
+               <label v-for="op in filteredOperatorAssignments" :key="op.id" class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 cursor-pointer transition-colors" :class="operatorAssignmentModal.selectedOperators.has(op.id) ? 'bg-emerald-50 border-emerald-200' : ''">
                  <input type="checkbox" :checked="operatorAssignmentModal.selectedOperators.has(op.id)" @change="toggleOperatorAssignment(op.id)" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
                  <div class="flex-1"><span class="block text-sm font-bold text-slate-800">{{ op.name }}</span><span class="block text-xs text-slate-500">{{ op.username }}</span></div>
                  <svg v-if="operatorAssignmentModal.selectedOperators.has(op.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                </label>
-               <p v-if="availableLiveOperators.length === 0" class="text-sm text-slate-500 text-center py-4">No Operators available.</p>
+               <p v-if="filteredOperatorAssignments.length === 0" class="text-sm text-slate-500 text-center py-4">No Operators match your search.</p>
              </div>
           </div>
           <div class="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
@@ -681,7 +671,10 @@ service cloud.firestore {
             <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-4"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
             <h3 class="text-xl font-black text-slate-900 mb-2">{{ confirmDialog.title }}</h3>
             <p class="text-sm text-slate-600 font-medium mb-8 leading-relaxed">{{ confirmDialog.message }}</p>
-            <div class="flex gap-3 justify-end"><button @click="closeConfirm" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button><button @click="confirmDialog.onConfirm" class="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition-colors">Confirm</button></div>
+            <div class="flex gap-3 justify-end">
+              <button @click="closeConfirm" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+              <button @click="confirmDialog.onConfirm" class="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition-colors">Confirm</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1121,7 +1114,7 @@ service cloud.firestore {
   <script type="module">
     import { createApp, ref, computed, onMounted, onUnmounted, nextTick, watch } from "https://unpkg.com/vue@3/dist/vue.esm-browser.js";
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'BR';
@@ -1140,9 +1133,6 @@ service cloud.firestore {
     createApp({
       setup() {
         const isDbReady = ref(false);
-        const dbPermissionError = ref(false);
-        const authError = ref(false);
-        const authErrorMessage = ref('');
 
         // State references mapping to Firebase Collections
         const users = ref([]);
@@ -1161,6 +1151,11 @@ service cloud.firestore {
         const newRoleForm = ref({ code: '', name: '', isAdmin: false });
         const profileForm = ref({ name: '', newPassword: '', confirmPassword: '' });
         const profileMessage = ref(null);
+
+        const showEditUserModal = ref(false);
+        const editingUser = ref({ id: '', username: '', password: '', name: '', role: '', accountStatus: '' });
+        const editUserErrorMsg = ref('');
+        const showEditUserPwd = ref(false);
 
         const activeTab = ref('dashboard');
         const settingsView = ref('profile');
@@ -1227,7 +1222,6 @@ service cloud.firestore {
         const editingAssetId = ref(null);
         const editAssetForm = ref({ name: '', link: '' });
 
-        // Firebase Initialization
         const firebaseConfig = {
           apiKey: "AIzaSyC-Kb3ILoIniEgrE8bqxxP7pBMJxKmk_ZM",
           authDomain: "liveopshub-cdf1a.firebaseapp.com",
@@ -1241,13 +1235,7 @@ service cloud.firestore {
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Firebase Helper Functions
-        const handleDbError = (err) => {
-            console.error('Firebase Error:', err);
-            if (err.message && err.message.includes('Missing or insufficient permissions')) {
-                dbPermissionError.value = true;
-            }
-        };
+        const handleDbError = (err) => { console.warn('Firebase Warning:', err.message); };
 
         const getCollectionRef = (colName) => collection(db, colName);
         const getDocRef = (colName, docId) => doc(db, colName, docId);
@@ -1262,7 +1250,6 @@ service cloud.firestore {
             catch (e) { handleDbError(e); }
         };
 
-        // Data Seeding Routine
         const seedDataIfNeeded = async () => {
            try {
                const rolesSnap = await getDocs(getCollectionRef('roles'));
@@ -1297,7 +1284,6 @@ service cloud.firestore {
                    
                    saveDoc('endorsements', 'e1', { id: 'e1', brandId: 'b3', author: 'admin', message: 'Payment gateway is returning 500 errors. Escalated to L2 Tech.', timestamp: Date.now() - 3600000, isResolved: false, severity: 'Critical', logType: 'incident', updates: [], larkLink: null });
                    saveDoc('endorsements', 'e2', { id: 'e2', brandId: 'b2', author: 'op2', message: 'Awaiting floor manager approval for bulk refunds over limit.', timestamp: Date.now() - 1800000, isResolved: false, severity: 'Needs Attention', logType: 'incident', updates: [], larkLink: null });
-                   
                    saveDoc('brandTasks', 't1', { id: 't1', brandId: 'b1', title: 'Check inventory sync logs', isCompleted: false, dueDate: new Date(Date.now() + 600000).toISOString().slice(0, 16), remindAhead: 5, status: 'Normal', createdAt: Date.now(), createdBy: 'admin', completedBy: null, updates: [], larkLink: null });
                }
            } catch (e) { handleDbError(e); }
@@ -1340,7 +1326,6 @@ service cloud.firestore {
             }, handleDbError);
         };
 
-        // Computed properties
         const getBrandName = (id) => brands.value.find(b => b.id === id)?.name || 'Unknown';
         const getBrandLogo = (id) => brands.value.find(b => b.id === id)?.logoBase64 || null;
         const getRoleName = (code) => roles.value.find(r => r.code === code)?.name || code || '';
@@ -1358,7 +1343,6 @@ service cloud.firestore {
         
         const selectedBrand = computed(() => brands.value.find(b => b.id === selectedBrandId.value) || null);
         const currentBrandEndorsements = computed(() => endorsements.value.filter(e => e.brandId === selectedBrandId.value));
-        
         const currentBrandTasks = computed(() => brandTasks.value.filter(t => t.brandId === selectedBrandId.value));
         
         const activeBrandTasks = computed(() => {
@@ -1370,17 +1354,34 @@ service cloud.firestore {
            });
         });
         
-        const completedBrandTasks = computed(() => {
-           return currentBrandTasks.value.filter(t => t.isCompleted).sort((a,b) => b.createdAt - a.createdAt);
-        });
-        
+        const completedBrandTasks = computed(() => { return currentBrandTasks.value.filter(t => t.isCompleted).sort((a,b) => b.createdAt - a.createdAt); });
         const currentBrandCampaigns = computed(() => campaigns.value.filter(c => c.brandId === selectedBrandId.value).sort((a,b) => b.createdAt - a.createdAt));
 
         const activeIssuesCount = computed(() => sortedBrandsActive.value.filter(b => b.status === 'Critical' || b.status === 'Needs Attention').length);
-        const recentActivities = computed(() => [...endorsements.value].filter(e => e.logType !== 'task').slice(0, 6));
+        
+        const recentActivities = computed(() => {
+           return [...endorsements.value]
+             .filter(e => e.logType !== 'task')
+             .sort((a, b) => b.timestamp - a.timestamp)
+             .slice(0, 6);
+        });
+        
         const recentTaskLogs = computed(() => {
           let allLogs = [];
-          brandTasks.value.forEach(t => { if(t.updates) t.updates.forEach(u => allLogs.push({...u, taskId: t.id, taskTitle: t.title, brandId: t.brandId, text: u.text, author: u.author, timestamp: u.timestamp})); });
+          brandTasks.value.forEach(t => { 
+             if(t.updates && t.updates.length > 0) {
+                 const latestUpdate = [...t.updates].sort((a,b) => b.timestamp - a.timestamp)[0];
+                 allLogs.push({
+                     ...latestUpdate, 
+                     taskId: t.id, 
+                     taskTitle: t.title, 
+                     brandId: t.brandId, 
+                     text: latestUpdate.text, 
+                     author: latestUpdate.author, 
+                     timestamp: latestUpdate.timestamp
+                 }); 
+             }
+          });
           return allLogs.sort((a,b) => b.timestamp - a.timestamp).slice(0, 6);
         });
 
@@ -1409,6 +1410,18 @@ service cloud.firestore {
 
         const availableLiveOperators = computed(() => users.value.filter(u => u.role === 'LO').sort((a, b) => a.name.localeCompare(b.name)));
         
+        const filteredAssignmentBrands = computed(() => {
+            if(!assignmentModal.value) return [];
+            const query = (assignmentModal.value.searchQuery || '').toLowerCase();
+            return sortedBrandsAdmin.value.filter(b => b.name.toLowerCase().includes(query));
+        });
+
+        const filteredOperatorAssignments = computed(() => {
+            if(!operatorAssignmentModal.value) return [];
+            const query = (operatorAssignmentModal.value.searchQuery || '').toLowerCase();
+            return availableLiveOperators.value.filter(op => op.name.toLowerCase().includes(query) || op.username.toLowerCase().includes(query));
+        });
+
         const usersGroupedByRole = computed(() => {
           const tab = userTab.value, q = userSearchTerm.value.toLowerCase();
           const filtered = users.value.filter(u => u.accountStatus === tab && (u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q)));
@@ -1422,8 +1435,12 @@ service cloud.firestore {
           const norm = getC('Normal'), pend = getC('Pending'), att = getC('Needs Attention'), crit = getC('Critical');
           const uLogs = es.filter(e => !e.isResolved).length;
           const resLogs = es.filter(e => e.isResolved).length;
-          const activeTasks = ts.filter(t => !t.isCompleted).length;
-          const endorsedTasks = ts.filter(t => !t.isCompleted && t.endorsementInterval).length;
+          
+          // Fix: Ensure active tasks map only to active brands
+          const activeBrandIds = new Set(bs.map(b => b.id));
+          const activeTasks = ts.filter(t => !t.isCompleted && activeBrandIds.has(t.brandId)).length;
+          const endorsedTasks = ts.filter(t => !t.isCompleted && t.endorsementInterval && activeBrandIds.has(t.brandId)).length;
+          
           return {
             totalBrands: total, normalBrands: norm, pendingBrands: pend, attentionBrands: att, criticalBrands: crit, unresolvedLogs: uLogs,
             resolutionRate: (uLogs + resLogs) > 0 ? Math.round((resLogs / (uLogs + resLogs)) * 100) : 100,
@@ -1499,6 +1516,7 @@ service cloud.firestore {
         };
 
         const requestConfirm = (title, message, action) => { confirmDialog.value = { title, message, onConfirm: () => { action(); confirmDialog.value = null; } }; };
+        const closeConfirm = () => { confirmDialog.value = null; };
         
         const handleLogin = () => {
           loginError.value = ''; const u = users.value.find(x => x.username === loginForm.value.username && x.password === loginForm.value.password);
@@ -1525,6 +1543,34 @@ service cloud.firestore {
           saveDoc('users', newId, { ...newUser.value, id: newId, assignedBrandIds: [], assignedOperatorIds: [], accountStatus: 'Active' });
           newUser.value = { username: '', password: '', name: '', role: 'LO' }; showAddUserModal.value = false;
         });};
+
+        const openEditUserModal = (u) => {
+            editingUser.value = { ...u };
+            editUserErrorMsg.value = '';
+            showEditUserModal.value = true;
+        };
+
+        const promptSaveUserEdit = () => {
+            editUserErrorMsg.value = '';
+            if (!editingUser.value.name.trim() || !editingUser.value.username.trim() || !editingUser.value.password.trim()) {
+                editUserErrorMsg.value = 'All fields are required.';
+                return;
+            }
+            if (users.value.some(u => u.username.toLowerCase() === editingUser.value.username.toLowerCase() && u.id !== editingUser.value.id)) {
+                editUserErrorMsg.value = 'Username already exists.';
+                return;
+            }
+            requestConfirm('Save Changes', 'Update this user account?', () => {
+                saveDoc('users', editingUser.value.id, {
+                    name: editingUser.value.name.trim(),
+                    username: editingUser.value.username.trim(),
+                    password: editingUser.value.password.trim(),
+                    role: editingUser.value.role
+                });
+                showEditUserModal.value = false;
+            });
+        };
+
         const promptDeleteUser = (id) => requestConfirm('Revoke User Access', 'Completely remove this user?', () => { if (id !== currentUser.value?.id) delDoc('users', id); });
         const promptChangeUserStatus = (id, newStatus) => requestConfirm('Change Status', `Change user status to ${newStatus}?`, () => { saveDoc('users', id, { accountStatus: newStatus }); });
 
@@ -1544,7 +1590,7 @@ service cloud.firestore {
             saveDoc('roles', curr.code, { order: next.order }); saveDoc('roles', next.code, { order: curr.order }); 
         };
 
-        const openAssignmentModal = (user) => { assignmentModal.value = { userId: user.id, userName: user.name, selectedBrands: new Set(user.assignedBrandIds || []) }; };
+        const openAssignmentModal = (user) => { assignmentModal.value = { userId: user.id, userName: user.name, searchQuery: '', selectedBrands: new Set(user.assignedBrandIds || []) }; };
         const closeAssignmentModal = () => { assignmentModal.value = null; };
         const toggleBrandAssignment = (id) => { const s = new Set(assignmentModal.value.selectedBrands); s.has(id) ? s.delete(id) : s.add(id); assignmentModal.value.selectedBrands = s; };
         const promptSaveAssignments = () => requestConfirm('Save Assignments', 'Update brand assignments?', () => { 
@@ -1552,7 +1598,7 @@ service cloud.firestore {
             closeAssignmentModal(); 
         });
 
-        const openOperatorAssignmentModal = (user) => { operatorAssignmentModal.value = { userId: user.id, userName: user.name, selectedOperators: new Set(user.assignedOperatorIds || []) }; };
+        const openOperatorAssignmentModal = (user) => { operatorAssignmentModal.value = { userId: user.id, userName: user.name, searchQuery: '', selectedOperators: new Set(user.assignedOperatorIds || []) }; };
         const closeOperatorAssignmentModal = () => { operatorAssignmentModal.value = null; };
         const toggleOperatorAssignment = (id) => { const s = new Set(operatorAssignmentModal.value.selectedOperators); s.has(id) ? s.delete(id) : s.add(id); operatorAssignmentModal.value.selectedOperators = s; };
         const promptSaveOperatorAssignments = () => requestConfirm('Save Team', 'Update assigned operators?', () => { 
@@ -1826,23 +1872,10 @@ service cloud.firestore {
           }
         }, { deep: true });
 
-        const copyRules = () => {
-            const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
-            navigator.clipboard.writeText(rules).catch(() => {
-                const textArea = document.createElement("textarea");
-                textArea.value = rules; document.body.appendChild(textArea);
-                textArea.focus(); textArea.select();
-                try { document.execCommand('copy'); } catch (err) {}
-                document.body.removeChild(textArea);
-            });
-        };
-
         onMounted(() => {
           const initAuth = async () => {
              try {
-                // Direct connection to your personal Firebase project
                 await signInAnonymously(auth);
-                
                 onAuthStateChanged(auth, async (user) => {
                    if (user) {
                       await seedDataIfNeeded();
@@ -1851,10 +1884,8 @@ service cloud.firestore {
                    }
                 });
              } catch (e) { 
-                 console.error('Auth error - Make sure Anonymous Sign-in is enabled in Firebase!', e); 
-                 authError.value = true;
-                 authErrorMessage.value = e.message;
-                 isDbReady.value = true; // Unlock loading screen to show error
+                 console.warn('Silent Auth Error:', e.message); 
+                 isDbReady.value = true; 
              }
           };
           initAuth();
@@ -1868,13 +1899,14 @@ service cloud.firestore {
         onUnmounted(() => { clearInterval(timeInterval); clearInterval(taskCheckInterval); if (audioCtx) audioCtx.close(); });
 
         return {
-          isDbReady, dbPermissionError, authError, authErrorMessage, copyRules, users, currentUser, roles, loginForm, loginError, newUser, userErrorMsg, newRoleForm, profileForm, profileMessage,
+          isDbReady, users, currentUser, roles, loginForm, loginError, newUser, userErrorMsg, newRoleForm, profileForm, profileMessage,
+          showEditUserModal, editingUser, editUserErrorMsg, showEditUserPwd, openEditUserModal, promptSaveUserEdit,
           activeTab, settingsView, userTab, userSearchTerm, currentTime, isSidebarExpanded, brands, endorsements,
-          availableFilters, currentFilter, selectedBrandId, confirmDialog, showAddUserModal, showRolesModal, assignmentModal,
+          availableFilters, currentFilter, selectedBrandId, confirmDialog, closeConfirm, showAddUserModal, showRolesModal, assignmentModal,
           operatorAssignmentModal, showLoginPwd, showNewUserPwd, showProfileNewPwd, showProfileConfirmPwd, visiblePasswordUserId,
           brandPanelTab, recordSubTab, taskSubTab, brandTasks, expandedTaskId, expandedRecordId, newTaskUpdateTexts, newTaskUpdateLarkLinks, newRecordUpdateTexts, newRecordUpdateLarkLinks, activeNotifications, newBrand, editingBrandId, editForm,
           editingTaskId, editTaskTitleText, editTaskDueDateText, editTaskLarkLinkText, endorseModal, campaigns, newCampaignName, newAssetForms, editAssetForm,
-          editingCampaignId, editCampaignName, editingAssetId,
+          editingCampaignId, editCampaignName, editingAssetId, filteredAssignmentBrands, filteredOperatorAssignments,
           newEndorsementMessage, newEndorsementSeverity, newEndorsementLarkLink, isAdmin, sortedBrandsAdmin, sortedBrandsActive, filteredBrands,
           selectedBrand, currentBrandEndorsements, currentBrandTasks, activeBrandTasks, completedBrandTasks, currentBrandCampaigns, activeIssuesCount, recentActivities, recentTaskLogs, availableLiveOperators,
           usersGroupedByRole, stats, formatDate, initializeAudio, dismissNotification, getBrandIncompleteTaskCount, getBrandTaskMetrics,
