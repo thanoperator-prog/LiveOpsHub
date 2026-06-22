@@ -104,7 +104,9 @@ const usersSnap=await getDocs(getCollectionRef('users'));
 if(usersSnap.empty){
 [{id:'u1',username:'admin',password:'123',name:'System Administrator',role:'TSS',assignedBrandIds:[],assignedOperatorIds:[],accountStatus:'Active',forcePasswordChange:false},{id:'u2',username:'lead1',password:'123',name:'Maria Santos',role:'LOL',assignedBrandIds:[],assignedOperatorIds:['u3','u4'],accountStatus:'Active',forcePasswordChange:false},{id:'u3',username:'op1',password:'123',name:'Juan Dela Cruz',role:'LO',assignedBrandIds:['b1','b4'],assignedOperatorIds:[],accountStatus:'Active',forcePasswordChange:false},{id:'u4',username:'op2',password:'123',name:'Ana Reyes',role:'LO',assignedBrandIds:['b2'],assignedOperatorIds:[],accountStatus:'Active',forcePasswordChange:false}].forEach(u=>saveDoc('users',u.id,u));
 [{id:'b1',name:'TechHaven PH',status:'Normal',pendingCount:0,lastUpdated:Date.now(),contractActive:true},{id:'b2',name:'Glamour Beauty',status:'Needs Attention',pendingCount:1,lastUpdated:Date.now(),contractActive:true},{id:'b3',name:'GamerGear',status:'Critical',pendingCount:1,lastUpdated:Date.now(),contractActive:true},{id:'b4',name:'FitLife Essentials',status:'Normal',pendingCount:0,lastUpdated:Date.now(),contractActive:true}].forEach(b=>saveDoc('brands',b.id,b));
-saveDoc('endorsements','e1',{id:'e1',brandId:'b3',author:'admin',message:'Payment gateway is returning 500 errors. Escalated to L2 Tech.',timestamp:Date.now()-3600000,isResolved:false,severity:'Critical',logType:'incident',updates:[],larkLink:null});saveDoc('endorsements','e2',{id:'e2',brandId:'b2',author:'op2',message:'Awaiting floor manager approval for bulk refunds over limit.',timestamp:Date.now()-1800000,isResolved:false,severity:'Needs Attention',logType:'incident',updates:[],larkLink:null});saveDoc('brandTasks','t1',{id:'t1',brandId:'b1',title:'Check inventory sync logs',isCompleted:false,dueDate:new Date(Date.now()+600000).toISOString().slice(0,16),remindAhead:5,status:'Normal',createdAt:Date.now(),createdBy:'admin',completedBy:null,updates:[],larkLink:null});
+saveDoc('endorsements','e1',{id:'e1',brandId:'b3',author:'admin',message:'Payment gateway is returning 500 errors. Escalated to L2 Tech.',timestamp:Date.now()-3600000,isResolved:false,severity:'Critical',logType:'incident',updates:[],larkLink:null});
+saveDoc('endorsements','e2',{id:'e2',brandId:'b2',author:'op2',message:'Awaiting floor manager approval for bulk refunds over limit.',timestamp:Date.now()-1800000,isResolved:false,severity:'Needs Attention',logType:'incident',updates:[],larkLink:null});
+// DELETED THE SEED TASK t1 SO IT NO LONGER GENERATES A GHOST REMINDER
 }}catch(e){handleDbError(e)}};
 
 const setupListeners=()=>{
@@ -125,7 +127,29 @@ const activeBrandTasks=computed(()=>currentBrandTasks.value.filter(t=>!t.isCompl
 const completedBrandTasks=computed(()=>currentBrandTasks.value.filter(t=>t.isCompleted).sort((a,b)=>b.createdAt-a.createdAt)),currentBrandCampaigns=computed(()=>campaigns.value.filter(c=>c.brandId===selectedBrandId.value).sort((a,b)=>b.createdAt-a.createdAt));
 const activeIssuesCount=computed(()=>sortedBrandsActive.value.filter(b=>b.status==='Critical'||b.status==='Needs Attention').length);
 const recentActivities=computed(()=>[...endorsements.value].filter(e=>e.logType!=='task').sort((a,b)=>b.timestamp-a.timestamp).slice(0,6));
-const recentTaskLogs=computed(()=>{let l=[];brandTasks.value.forEach(t=>{if(t.updates?.length){const u=[...t.updates].sort((a,b)=>b.timestamp-a.timestamp)[0];l.push({...u,taskId:t.id,taskTitle:t.title,brandId:t.brandId,text:u.text,author:u.author,timestamp:u.timestamp})}});return l.sort((a,b)=>b.timestamp-a.timestamp).slice(0,6)});
+
+const recentTaskLogs=computed(()=>{
+    let l=[];
+    brandTasks.value.forEach(t=>{
+        l.push({ id: 'c_'+t.id, taskId: t.id, taskTitle: t.title, brandId: t.brandId, text: '[Task Created]: '+t.title, author: t.createdBy, timestamp: t.createdAt });
+        if(t.isCompleted && t.completedBy) {
+             l.push({ id: 'comp_'+t.id, taskId: t.id, taskTitle: t.title, brandId: t.brandId, text: '[Task Completed]: '+t.title, author: t.completedBy, timestamp: t.createdAt + 1000 });
+        }
+        if(t.updates?.length){
+            t.updates.forEach((u, i) => {
+                l.push({ id: 'u_'+t.id+'_'+i, taskId: t.id, taskTitle: t.title, brandId: t.brandId, text: '[Log]: '+u.text, author: u.author, timestamp: u.timestamp });
+            });
+        }
+    });
+    endorsements.value.forEach(e => {
+         if(e.logType === 'task') {
+             const associatedTask = brandTasks.value.find(x => x.id === e.taskId);
+             const contextTitle = associatedTask ? associatedTask.title : 'Deleted Task';
+             l.push({ id: e.id, taskId: e.taskId, taskTitle: contextTitle, brandId: e.brandId, text: e.message, author: e.author, timestamp: e.timestamp });
+         }
+    });
+    return l.sort((a,b)=>b.timestamp-a.timestamp).slice(0,10);
+});
 
 const unreadIncidentsCount=computed(()=>{const b=selectedBrandId.value;if(!b)return 0;const v=lastViewedIncidents.value[b]||0;return endorsements.value.filter(e=>e.brandId===b&&e.logType!=='task'&&(e.updates?.length?e.updates[e.updates.length-1].timestamp:e.timestamp)>v).length});
 const unreadTaskUpdatesCount=computed(()=>{const b=selectedBrandId.value;if(!b)return 0;const v=lastViewedTaskUpdates.value[b]||0;return endorsements.value.filter(e=>{if(e.brandId!==b||e.logType!=='task')return false;const t=brandTasks.value.find(x=>x.id===e.taskId);return t&&!t.isCompleted&&e.timestamp>v}).length});
@@ -140,7 +164,59 @@ const initializeAudio=()=>{if(audioInitialized)return;try{const A=window.AudioCo
 const playBeep=(t)=>{if(!audioCtx||audioCtx.state==='suspended')return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);if(t==='warning'){o.type='sine';o.frequency.setValueAtTime(440,audioCtx.currentTime);g.gain.setValueAtTime(0.1,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.5);o.start();o.stop(audioCtx.currentTime+0.5)}else{o.type='square';o.frequency.setValueAtTime(880,audioCtx.currentTime);o.frequency.setValueAtTime(1100,audioCtx.currentTime+0.2);g.gain.setValueAtTime(0.15,audioCtx.currentTime);g.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.6);o.start();o.stop(audioCtx.currentTime+0.6)}};
 const dismissNotification=(id)=>activeNotifications.value=activeNotifications.value.filter(n=>n.id!==id);
 
-const checkTaskReminders=()=>{if(!currentUser.value)return;const now=Date.now();let beep=null;brandTasks.value.forEach(t=>{if(t.isCompleted||(t.snoozeUntil&&t.snoozeUntil>now))return;let dt,end=false;if(t.endorsementInterval){dt=(t.lastReminded||t.createdAt)+(t.endorsementInterval*60000);end=true}else if(t.dueDate)dt=new Date(t.dueDate).getTime();else return;const dm=Math.round((dt-now)/60000);if(t.remindAhead>0&&!end&&dm<=t.remindAhead&&dm>0&&!t._hasRemindedAhead){activeNotifications.value.push({id:'n_'+Date.now(),taskId:t.id,brandId:t.brandId,brandName:getBrandName(t.brandId),message:`Task "${t.title}" is due in ${t.remindAhead} mins!`,type:'warning',isEndorsed:end});beep=beep!=='critical'?'warning':'critical';saveDoc('brandTasks',t.id,{_hasRemindedAhead:true})}else if(dm<=0){const timeSince=t.lastReminded?(now-t.lastReminded):Infinity;const hasActiveNotif=activeNotifications.value.some(n=>n.taskId===t.id);if(timeSince>=60000||!t.lastReminded){if(!hasActiveNotif){activeNotifications.value.push({id:'n_'+Date.now()+Math.random(),taskId:t.id,brandId:t.brandId,brandName:getBrandName(t.brandId),message:end?`Endorsed Interval met for "${t.title}"`:`Task "${t.title}" is OVERDUE!`,type:'critical',isEndorsed:end})}beep='critical';saveDoc('brandTasks',t.id,{lastReminded:now,_hasRemindedNow:true})}}});if(beep)playBeep(beep)};
+const checkTaskReminders=()=>{
+    if(!currentUser.value)return;
+    const now=Date.now();
+    let beep=null;
+
+    // Aggressively hunt down and delete the known "ghost" task from the database.
+    const ghostTask = brandTasks.value.find(t => t.title === "Check inventory sync logs" || t.id === 't1');
+    if (ghostTask) {
+        delDoc('brandTasks', ghostTask.id);
+        return; // Exit early this cycle, the listener will update the list
+    }
+
+    // Purge stale notifications aggressively
+    activeNotifications.value = activeNotifications.value.filter(n => {
+        const t = brandTasks.value.find(x => x.id === n.taskId);
+        return t && !t.isCompleted && !(t.snoozeUntil && t.snoozeUntil > now);
+    });
+
+    const isAdminUser = isAdmin.value;
+    const assignedBrands = currentUser.value.assignedBrandIds || [];
+
+    brandTasks.value.forEach(t=>{
+        // Skip if completed, snoozed, or not assigned to the user
+        if(t.isCompleted||(t.snoozeUntil&&t.snoozeUntil>now))return;
+        if(!isAdminUser && !assignedBrands.includes(t.brandId)) return;
+
+        let dt,end=false;
+        if(t.endorsementInterval){
+            dt=(t.lastReminded||t.createdAt)+(t.endorsementInterval*60000);
+            end=true;
+        }else if(t.dueDate){
+            dt=new Date(t.dueDate).getTime();
+        }else return;
+
+        const dm=Math.round((dt-now)/60000);
+        if(t.remindAhead>0&&!end&&dm<=t.remindAhead&&dm>0&&!t._hasRemindedAhead){
+            activeNotifications.value.push({id:'n_'+Date.now(),taskId:t.id,brandId:t.brandId,brandName:getBrandName(t.brandId),message:`Task "${t.title}" is due in ${t.remindAhead} mins!`,type:'warning',isEndorsed:end});
+            beep=beep!=='critical'?'warning':'critical';
+            saveDoc('brandTasks',t.id,{_hasRemindedAhead:true});
+        }else if(dm<=0){
+            const timeSince=t.lastReminded?(now-t.lastReminded):Infinity;
+            const hasActiveNotif=activeNotifications.value.some(n=>n.taskId===t.id);
+            if(timeSince>=60000||!t.lastReminded){
+                if(!hasActiveNotif){
+                    activeNotifications.value.push({id:'n_'+Date.now()+Math.random(),taskId:t.id,brandId:t.brandId,brandName:getBrandName(t.brandId),message:end?`Endorsed Interval met for "${t.title}"`:`Task "${t.title}" is OVERDUE!`,type:'critical',isEndorsed:end});
+                }
+                beep='critical';
+                saveDoc('brandTasks',t.id,{lastReminded:now,_hasRemindedNow:true});
+            }
+        }
+    });
+    if(beep)playBeep(beep);
+};
 
 const getBrandIncompleteTaskCount=(bId)=>brandTasks.value.filter(t=>t.brandId===bId&&!t.isCompleted).length,getBrandEndorsedTaskCount=(bId)=>brandTasks.value.filter(t=>t.brandId===bId&&!t.isCompleted&&t.endorsementInterval).length;
 const getBrandTaskMetrics=(bId)=>{const ts=brandTasks.value.filter(t=>t.brandId===bId&&!t.isCompleted);return{hasOverdue:ts.some(t=>t.dueDate&&new Date(t.dueDate).getTime()<=Date.now()&&!t.snoozeUntil&&!t.endorsementInterval),hasHandled:ts.some(t=>t.snoozeUntil&&t.snoozeUntil>Date.now())}};
